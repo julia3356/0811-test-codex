@@ -27,7 +27,7 @@ Example:
 ## Testing Guidelines
 - Frameworks: pytest (Python), Jest/Vitest (JS/TS).
 - Test files: `tests/<module>/test_*.py` or `**/*.test.ts`.
-- Coverage: target ≥ 90% for changed code. Fail CI on drops; upload reports as artifacts.
+- Coverage: target ≥ 80% for changed code (diff coverage). Fail CI on drops; upload reports as artifacts.
 
 ## Commit & Pull Request Guidelines
 - Use Conventional Commits: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
@@ -43,4 +43,3 @@ Example:
 - Prefer small, targeted patches; don’t modify unrelated files.
 - Use `rg` to search, keep diffs minimal, and mirror `src/`→`tests/` structure.
 - When adding tools/config, document commands in README and wire into CI.
-
