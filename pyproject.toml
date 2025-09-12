@@ -1,0 +1,16 @@
+[project]
+name = "coding-space"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "diff-cover>=8.0",
+]

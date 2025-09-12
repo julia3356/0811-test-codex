@@ -1,0 +1,81 @@
+# Coding Space
+
+A minimal starter repository scaffold for iterative development. Use this as a clean base to add application code under `src/`, tests under `tests/`, and automation via `scripts/` and CI workflows.
+
+## Project Structure
+- `src/` application modules and entry points
+- `tests/` unit/integration tests mirroring `src/`
+- `scripts/` automation (setup, lint, build, release)
+- `assets/` static files, sample data, schemas
+- `.github/workflows/` CI pipelines
+
+Example
+```
+src/feature_a/
+tests/feature_a/test_basic.py
+scripts/dev/seed.sh
+.github/workflows/ci.yml
+.github/workflows/nightly-audit.yml
+output/              # CLI 默认输出目录（运行后生成）
+```
+
+## Quickstart
+- Clone: `git clone <repo> && cd coding-space`
+- Choose your stack and install deps:
+  - Node: `npm install`
+  - Python: `python -m venv .venv && source .venv/bin/activate && pip install -U pip`
+- Run (pick what matches your stack):
+  - Node: `npm run dev` or `npm run build && npm start`
+- Python: `python -m src.app` (after creating `src/app.py`)
+- Optional Make targets: `make dev`, `make build`, `make test` (add a Makefile).
+
+## Excel Transformer (Python)
+This repo includes a small Excel-to-structured-output CLI under `src/excel_transformer`.
+
+- Generate sample Excel for local testing:
+  - `.venv/bin/python scripts/generate_sample_xlsx.py`
+
+- Basic usage (terminal output):
+  - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f terminal`
+
+- CSV/XLSX output to `./output/` directory:
+  - Output directory is fixed to `./output/` (auto-created).
+  - If `-o/--output` is omitted, the file name defaults to the input Excel file name with the correct extension.
+  - Examples:
+    - CSV with default name: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv`
+      - Produces `output/sample.csv`
+    - CSV with custom name: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv -o result.csv`
+      - Produces `output/result.csv`
+    - XLSX with name without extension: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f xlsx -o result`
+      - Produces `output/result.xlsx`
+
+Notes
+- The `-f/--format` options are: `terminal`, `csv`, `xlsx`.
+- The input must be an `.xlsx` file; non-`.xlsx` inputs are rejected.
+
+## Testing
+- JavaScript/TypeScript: `npm test` (coverage: `npm test -- --coverage`)
+- Python: `pytest -q` (coverage: `pytest --cov=src`)
+- Place tests under `tests/<module>/...` or `**/*.test.ts` and keep them fast, isolated, and deterministic.
+
+## CI & Reports
+- Workflows
+  - `CI` (push/PR to `main`/`master`): runs tests with coverage and publishes non-blocking reports.
+  - `Nightly Security Audit`: daily pip-audit; also triggerable via workflow dispatch.
+- Coverage (diff-based)
+  - Generates `coverage.xml` and a diff coverage report comparing to `origin/main`.
+  - Artifact: `diff-cover` (file: `diff-cover.txt`). Not blocking merges.
+- Dependency security audit
+  - PR/Push: runs only when `pyproject.toml`, `requirements.txt`, or `uv.lock` change; non-blocking.
+  - Nightly: always runs, non-blocking.
+  - Artifacts: `pip-audit` (PR/Push) and `nightly-pip-audit` (Nightly), each containing `pip-audit.json`.
+- Local reproduction
+  - Tests with coverage: `pytest --cov=src --cov-report=xml -q`
+  - Diff coverage (requires `diff-cover`): `diff-cover coverage.xml --compare-branch origin/main > diff-cover.txt`
+
+## Contributing
+- Read the contributor guide in `AGENTS.md` for style, tooling, commit/PR rules, and security practices.
+- Prefer small, focused PRs with clear descriptions and tests for new behavior.
+
+## License
+Specify a license (e.g., MIT) in `LICENSE`.
