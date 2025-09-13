@@ -60,6 +60,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         default="terminal",
         help="输出格式：terminal/csv/xlsx，默认 terminal",
     )
+    parser.add_argument(
+        "--pretty",
+        action="store_true",
+        help="终端输出时美化 JSON（缩进显示）",
+    )
 
     args = parser.parse_args(argv)
 
@@ -84,7 +89,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     if args.format == "terminal":
-        print_terminal(rows)
+        print_terminal(rows, pretty=args.pretty)
     else:
         out_dir = Path("./output")
         out_dir.mkdir(parents=True, exist_ok=True)

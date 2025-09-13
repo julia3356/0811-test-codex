@@ -37,6 +37,8 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
 
 - Basic usage (terminal output):
   - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f terminal`
+  - Pretty JSON: add `--pretty` to beautify terminal output
+    - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f terminal --pretty`
 
 - CSV/XLSX output to `./output/` directory:
   - Output directory is fixed to `./output/` (auto-created).
@@ -52,6 +54,7 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
 Notes
 - The `-f/--format` options are: `terminal`, `csv`, `xlsx`.
 - The input must be an `.xlsx` file; non-`.xlsx` inputs are rejected.
+ - Terminal output supports `--pretty` for indented JSON.
 
 ## Testing
 - JavaScript/TypeScript: `npm test` (coverage: `npm test -- --coverage`)

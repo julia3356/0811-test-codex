@@ -213,6 +213,9 @@ def write_xlsx(path: str, rows: List[Dict[str, Any]]) -> None:
     wb.save(path)
 
 
-def print_terminal(rows: List[Dict[str, Any]]) -> None:
+def print_terminal(rows: List[Dict[str, Any]], pretty: bool = False) -> None:
     for r in rows:
-        print(json.dumps(r, ensure_ascii=False))
+        if pretty:
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+        else:
+            print(json.dumps(r, ensure_ascii=False))
