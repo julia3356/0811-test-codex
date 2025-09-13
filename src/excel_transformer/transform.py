@@ -95,10 +95,10 @@ def _resolve_field(
     - If spec is a string: treat it as output key, and take value from the column named by field_key.
     - If spec is an object with {name, value, ex?}: compute value with optional conditional override.
     """
-    # Case 1: direct mapping
+    # Case 1: direct mapping (spec is internal key to fetch; output key is the field key)
     if isinstance(spec, str):
-        output_key = spec
-        value = _cell_value_by_display(headers, row_values, field_key)
+        output_key = field_key
+        value = _value_by_internal(headers, row_values, internal_to_display, spec)
         return output_key, value
 
     if isinstance(spec, dict):
@@ -122,7 +122,8 @@ def _resolve_field(
                         value_ref = override
                         break
         # Pull the value from the row by internal key reference
-        output_key = name if name else str(field_key)
+        # Output key should be the field key in the [out] group; `name` is a logical name, not the output label.
+        output_key = str(field_key)
         if isinstance(value_ref, str):
             value = _value_by_internal(headers, row_values, internal_to_display, value_ref)
         else:
@@ -215,4 +216,3 @@ def write_xlsx(path: str, rows: List[Dict[str, Any]]) -> None:
 def print_terminal(rows: List[Dict[str, Any]]) -> None:
     for r in rows:
         print(json.dumps(r, ensure_ascii=False))
-

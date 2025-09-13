@@ -33,6 +33,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev]
 
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+
+      - name: Format check (black)
+        run: |
+          black --check .
+
       - name: Detect changed dependency files
         id: filter
         uses: dorny/paths-filter@v3
@@ -66,10 +74,10 @@ jobs:
         run: |
           git fetch --no-tags --prune origin main
 
-      - name: Diff coverage report (origin/main, non-blocking)
-        continue-on-error: true
+      - name: Diff coverage gate (origin/main, fail <80%)
         run: |
-          diff-cover coverage.xml --compare-branch origin/main > diff-cover.txt || true
+          set -euo pipefail
+          diff-cover coverage.xml --compare-branch origin/main --fail-under 80 | tee diff-cover.txt
 
       - name: Upload diff coverage report
         uses: actions/upload-artifact@v4

@@ -46,6 +46,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 pytestdebug.log
+diff-cover.txt
 
 # Translations
 *.mo
@@ -126,6 +127,9 @@ Thumbs.db
 *.log
 logs/
 log/
+
+# Security / audit reports (local)
+pip-audit.json
 
 # App outputs
 output/

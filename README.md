@@ -27,7 +27,7 @@ output/              # CLI 默认输出目录（运行后生成）
 - Run (pick what matches your stack):
   - Node: `npm run dev` or `npm run build && npm start`
 - Python: `python -m src.app` (after creating `src/app.py`)
-- Optional Make targets: `make dev`, `make build`, `make test` (add a Makefile).
+- Optional Make targets: `make build`, `make test`, `make lint`, `make fmt`, `make fmt-check`.
 
 ## Excel Transformer (Python)
 This repo includes a small Excel-to-structured-output CLI under `src/excel_transformer`.
@@ -57,6 +57,36 @@ Notes
 - JavaScript/TypeScript: `npm test` (coverage: `npm test -- --coverage`)
 - Python: `pytest -q` (coverage: `pytest --cov=src`)
 - Place tests under `tests/<module>/...` or `**/*.test.ts` and keep them fast, isolated, and deterministic.
+
+## Commands
+- `make test` runs tests with coverage.
+- `make lint` runs Ruff for static checks.
+- `make fmt` formats code with Black.
+- `make fmt-check` verifies formatting without changing files.
+- `make build` builds a source and wheel distribution via `python -m build`.
+
+## Git via SSH
+- Check remote: `git remote -v`
+- Set SSH remote: `git remote set-url origin git@github.com:<user>/<repo>.git`
+- Test SSH auth: `ssh -T git@github.com` (ensure your SSH key is added to GitHub)
+- Push: `git push origin <branch>`
+
+## Pre-commit Hooks
+- Install tooling: `pip install -e .[dev] && pip install pre-commit` (or just dev extras)
+- Install hooks: `pre-commit install`
+- Run on all files once: `pre-commit run --all-files`
+- Commit bypass (not recommended): `git commit -m "msg" --no-verify`
+
+Hooks configured
+- Ruff (with auto-fix)
+- Black
+- Pytest (runs quick test suite)
+
+## Diff Coverage Gate
+- CI enforces diff coverage ≥ 80% vs `origin/main` and fails below the threshold.
+- Local reproduction:
+  - `pytest --cov=src --cov-report=xml -q`
+  - `diff-cover coverage.xml --compare-branch origin/main --fail-under 80`
 
 ## CI & Reports
 - Workflows
