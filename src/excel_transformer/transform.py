@@ -90,10 +90,14 @@ def _resolve_field(
     internal_to_display: Mapping[str, str],
     context_by_internal: Mapping[str, Any],
 ) -> Tuple[str, Any]:
-    """Resolve one field of an out-group.
+    """Resolve one field of an out-group into a key/value pair.
 
-    - If spec is a string: treat it as output key, and take value from the column named by field_key.
-    - If spec is an object with {name, value, ex?}: compute value with optional conditional override.
+    Supports:
+    - Direct mapping: spec is a string referencing an internal key -> fetch cell.
+    - Rule mapping: spec is an object with optional keys {name, value, ex}.
+    - Nested objects: spec is an object whose keys are not limited to {name, value, ex};
+      in this case, recursively resolve each child to produce a nested dict. This supports
+      multi-level nesting (情况三及更深层次)。
     """
     # Case 1: direct mapping (spec is internal key to fetch; output key is the field key)
     if isinstance(spec, str):
@@ -102,6 +106,26 @@ def _resolve_field(
         return output_key, value
 
     if isinstance(spec, dict):
+        # Distinguish between a rule object {name?, value?, ex?} and a nested object
+        reserved = {"name", "value", "ex"}
+        has_non_reserved_keys = any(k not in reserved for k in spec.keys())
+
+        if has_non_reserved_keys:
+            # Treat as nested object: recursively resolve each child
+            nested: Dict[str, Any] = {}
+            for child_key, child_spec in spec.items():
+                ck, cv = _resolve_field(
+                    field_key=str(child_key),
+                    spec=child_spec,
+                    headers=headers,
+                    row_values=row_values,
+                    internal_to_display=internal_to_display,
+                    context_by_internal=context_by_internal,
+                )
+                nested[ck] = cv
+            return str(field_key), nested
+
+        # Otherwise, treat as rule mapping object
         name = spec.get("name")
         value_ref = spec.get("value")
         ex = spec.get("ex")
@@ -118,7 +142,7 @@ def _resolve_field(
                     override = rule.get("value")
                     if not override and name:
                         override = rule.get(name)
-                    if override:
+                    if override is not None:
                         value_ref = override
                         break
         # Pull the value from the row by internal key reference
