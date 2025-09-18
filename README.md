@@ -40,7 +40,7 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
   - Pretty JSON: add `--pretty` to beautify terminal output
     - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f terminal --pretty`
 
-- CSV/XLSX output to `./output/` directory:
+- CSV/XLSX output to `./output/` directory (grouped by default):
   - Output directory is fixed to `./output/` (auto-created).
   - If `-o/--output` is omitted, the file name defaults to the input Excel file name with the correct extension.
   - Examples:
@@ -50,10 +50,10 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
       - Produces `output/result.csv`
     - XLSX with name without extension: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f xlsx -o result`
       - Produces `output/result.xlsx`
-  - Grouped columns (one row per source row): add `--grouped`
+  - Grouped columns (default):
     - Each `[out]` object becomes one column; the cell value is that group's JSON (compact by default)
-    - Label column with `"__label__"` inside the group object; fallback labels: `group1`, `group2`, ...
-    - Example: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv --grouped`
+    - Column names come only from `"__label__"` in each group; if missing, auto `group1/group2/...`
+    - One source row -> one output row. Fields inside a group are not expanded into multiple columns.
 
 Notes
 - The `-f/--format` options are: `terminal`, `csv`, `xlsx`.

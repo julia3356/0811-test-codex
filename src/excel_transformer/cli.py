@@ -103,8 +103,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.rows:
         row_numbers = _parse_rows_arg(args.rows)
 
-    # Transform according to selected output shape
-    if args.grouped and args.format in {"csv", "xlsx"}:
+    # For file outputs (csv/xlsx), always use grouped shape to ensure
+    # one cell per [out] object and columns defined by __label__.
+    if args.format in {"csv", "xlsx"}:
         rows = transform_rows_grouped(
             excel_path=args.excel,
             display_to_internal=cfg.display_to_internal,

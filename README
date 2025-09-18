@@ -82,12 +82,12 @@ input:
     "猜测回答":"answer-2"
 }
 
-新增：按组聚合输出（--grouped）
-- 适用于 CSV/XLSX：每个源数据行仅输出一行；每个 [out] 对象对应一列；单元格为该组 JSON 字符串（默认紧凑格式，可用 --pretty-json 美化）。
-- 列名：可在组对象顶层添加 "__label__" 指定列名；未指定时按顺序命名 group1/group2/...
-- 列顺序：严格按照 [out] 中对象出现顺序；对象内字段顺序同配置顺序。
+新增：按组聚合输出（CSV/XLSX 默认启用）
+- 每个源数据行仅输出一行；[out] 下的每个完整 JSON 对象仅占用一个单元格。
+- 列名只来自组对象顶层的 "__label__"；未指定时按顺序命名 group1/group2/...
+- 列顺序与配置顺序一致；组内字段不会展开为多列（单元格内写入 JSON）。
 - 示例：
-  - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv --grouped`
+  - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv`
 
 [out]
 check:

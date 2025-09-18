@@ -99,6 +99,9 @@ def _parse_multiple_json_objects(blob: str) -> List[Dict[str, Any]]:
             obj = json.loads(obj_raw)
         except Exception:
             obj = ast.literal_eval(obj_raw)  # type: ignore[assignment]
+        # Alias common typo: __lable__ -> __label__
+        if isinstance(obj, dict) and "__lable__" in obj and "__label__" not in obj:
+            obj["__label__"] = obj.get("__lable__")
         # Attempt to find a label on the immediate previous non-empty line
         # If not already injected by earlier step
         # Look backwards from start to previous line
