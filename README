@@ -7,27 +7,33 @@
 配置文件内容:
 [map]
 {
-"原始记录":"record",
-"计分":"score",
-"原始记录-问题":"ask",
-"问题的积分":"ask_score"
+    "原始记录":"record",
+    "计分":"score",
+    "原始记录-问题":"ask",
+    "问题的积分":"ask_score"
 }
 
 [out]
+input:
 {
   "原始记录":"record",
   "计分":"score"
-}
+}  //JSON字符串整体成为excel/csv文件中的第input列
+
+check:
 {
   "原始记录-问题":"ask",
   "问题的积分":"ask_score"
-}
+} //JSON字符串整体成为excel/csv文件中的第check列
 
 转化后的结构输出为:
+
+input:
 {
   "原始记录"://[原始记录]列对应行(--row number) 指定的内容
   "评分"://[计分]列对应行(--row number) 指定的内容
 }
+check:
 {
   "新的问题"://[原始记录-问题]列对应行(--row number) 指定的内容
   "问题的评分"://[问题的积分]列对应行(--row number) 指定的内容
@@ -38,25 +44,29 @@
 配置文件内容:
 [map]
 {
-"原始记录":"record",
-"计分":"score",
-"标准回答":"answer-1",
-"猜测回答":"answer-2"
+    "原始记录":"record",
+    "计分":"score",
+    "标准回答":"answer-1",
+    "猜测回答":"answer-2"
 }
 
 [out]
+input:
 {
-"原始记录":"record",
-"回答":{"name":"answer",
+    "原始记录":"record",
+    "回答":{
+        "name":"answer",
 	"value":"answer-1" //默认用answer-1
 	"ex":{ // 描述当何种情况下,将设计的字段映射到具体字段
 	  "if":"score==2",
 	  "answer":"answer-2", 
 	}
-  }
-}
+    }
+} //JSON字符串对应excel/csv文件的input列内容
 
 转化后结构输出为:
+
+input:
 {
   "原始记录"://[原始记录]列对应行(--row number) 指定的内容
   "回答"://当[计分]为2时,采用[猜测回答]内容,否则使用[标准回答]
@@ -66,37 +76,46 @@
 配置文件内容
 [map]
 {
-"原始记录":"record",
-"计分":"score",
-"标准回答":"answer-1",
-"猜测回答":"answer-2"
+    "原始记录":"record",
+    "计分":"score",
+    "标准回答":"answer-1",
+    "猜测回答":"answer-2"
 }
+
+新增：按组聚合输出（--grouped）
+- 适用于 CSV/XLSX：每个源数据行仅输出一行；每个 [out] 对象对应一列；单元格为该组 JSON 字符串（默认紧凑格式，可用 --pretty-json 美化）。
+- 列名：可在组对象顶层添加 "__label__" 指定列名；未指定时按顺序命名 group1/group2/...
+- 列顺序：严格按照 [out] 中对象出现顺序；对象内字段顺序同配置顺序。
+- 示例：
+  - `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv --grouped`
 
 [out]
+check:
 {
-"res":{
-"原始记录":"record",
-"回答":{"name":"answer",
-	"value":"answer-1" //默认用answer-1
-	"ex":{ // 描述当何种情况下,将设计的字段映射到具体字段
-	  "if":"score==2",
-	  "answer":"answer-2", 
-	}
-  }
-}
-"score":{
-"原始记录":"score"
-}
-}
+    "res":{
+        "原始记录":"record",
+        "回答":{
+            "name":"answer",
+	    "value":"answer-1" //默认用answer-1
+	    "ex":{ // 描述当何种情况下,将设计的字段映射到具体字段
+	        "if":"score==2",
+	        "answer":"answer-2", 
+	     }
+        }
+    }
+    "score":{
+        "原始记录":"score"
+    }
+} //JSON字符串对应excel/csv文件的check列内容
 
 转化后结构输出为:
+check:
 {
-"res":{
-  "原始记录"://[原始记录]列对应行(--row number) 指定的内容
-  "回答"://当[计分]为2时,采用[猜测回答]内容,否则使用[标准回答]
-},
-"score":{
-  "原始记录":2
+    "res":{
+        "原始记录"://[原始记录]列对应行(--row number) 指定的内容
+        "回答"://当[计分]为2时,采用[猜测回答]内容,否则使用[标准回答]
+     },
+    "score":{
+        "原始记录":2
+     }
 }
-}
-

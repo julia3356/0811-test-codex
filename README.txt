@@ -34,6 +34,8 @@ Excel 字段映射转换工具（uv 使用说明）
   - 指定表头所在行：`--header-row 1`（默认 1）
   - 仅处理单行：`--row 2`（数据行，从 1 开始，不含表头）
   - 处理多行：`--rows 1,3,5-10`
+  - 终端美化 JSON：`--pretty`
+  - CSV/XLSX 默认为紧凑 JSON（结构字段单行、无缩进）；如需多行美化可加：`--pretty-json`
 
 示例数据与配置
 - 生成示例 Excel：
@@ -58,4 +60,3 @@ Excel 字段映射转换工具（uv 使用说明）
   - `uv add openpyxl`（使用 uv 项目管理时）或 `uv pip install openpyxl`
 - 找不到模块 `excel_transformer`：
   - 确认在仓库根目录运行，且使用模块方式：`python -m src.excel_transformer.cli`
-

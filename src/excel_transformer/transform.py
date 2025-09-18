@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from contextlib import contextmanager
+import warnings
 
 from openpyxl import load_workbook, Workbook
 
@@ -170,7 +172,8 @@ def transform_rows(
 
     For each source row, each out-group produces one output record.
     """
-    wb = load_workbook(excel_path, data_only=True)
+    with _suppress_openpyxl_default_style_warning():
+        wb = load_workbook(excel_path, data_only=True)
     ws = wb[sheet_name] if sheet_name else wb.active
 
     # Read headers from header_row
@@ -214,27 +217,158 @@ def transform_rows(
     return results
 
 
-def write_csv(path: str, rows: List[Dict[str, Any]]) -> None:
+def transform_rows_grouped(
+    excel_path: str,
+    display_to_internal: Mapping[str, str],
+    out_groups: Sequence[Mapping[str, Any]],
+    sheet_name: Optional[str] = None,
+    header_row: int = 1,
+    row_numbers: Optional[Sequence[int]] = None,  # 1-based, excluding header row
+    *,
+    group_label_key: str = "__label__",
+) -> List[Dict[str, Any]]:
+    """Transform rows into one record per source row, grouping each [out] object
+    under a column named by a group label.
+
+    - Group label: taken from a reserved key (default: "__label__") inside each
+      [out] object. If absent, auto-named as "group1", "group2", ... by order.
+    - Group value: the resolved object built from the remaining keys in that [out]
+      object (excluding the reserved label key).
+    - Result: each row yields a single dict like {label1: {...}, label2: {...}}.
+    """
+    with _suppress_openpyxl_default_style_warning():
+        wb = load_workbook(excel_path, data_only=True)
+    ws = wb[sheet_name] if sheet_name else wb.active
+
+    # Read headers from header_row
+    headers: List[str] = []
+    for cell in ws[header_row]:
+        headers.append(str(cell.value) if cell.value is not None else "")
+
+    internal_to_display = _build_internal_to_display(display_to_internal)
+
+    results: List[Dict[str, Any]] = []
+
+    # Build iterable of row indices to process (1-based including header in ws indexing)
+    start_row_idx = header_row + 1
+    end_row_idx = ws.max_row
+    indices = range(start_row_idx, end_row_idx + 1)
+    if row_numbers:
+        # Convert to worksheet row indexes
+        indices = [header_row + n for n in row_numbers]
+
+    for r in indices:
+        row_cells = ws[r]
+        row_values = [c.value for c in row_cells]
+        # Context by internal keys for condition evaluation
+        context = {
+            internal: _value_by_internal(headers, row_values, internal_to_display, internal)
+            for internal in internal_to_display.keys()
+        }
+
+        grouped: Dict[str, Any] = {}
+        for idx, group in enumerate(out_groups):
+            label = None
+            if isinstance(group, dict) and group_label_key in group and isinstance(group[group_label_key], str):
+                label = str(group[group_label_key])
+            if not label:
+                label = f"group{idx + 1}"
+
+            obj: Dict[str, Any] = {}
+            if isinstance(group, Mapping):
+                for key, spec in group.items():
+                    if str(key) == group_label_key:
+                        continue  # skip label from object content
+                    out_key, out_val = _resolve_field(
+                        field_key=str(key),
+                        spec=spec,
+                        headers=headers,
+                        row_values=row_values,
+                        internal_to_display=internal_to_display,
+                        context_by_internal=context,
+                    )
+                    obj[out_key] = out_val
+            grouped[label] = obj
+
+        results.append(grouped)
+
+    return results
+
+
+def write_csv(path: str, rows: List[Dict[str, Any]], *, compact_json: bool = True) -> None:
     import csv
 
-    # Union of keys preserves insertion but we will sort for stability
-    fieldnames: List[str] = sorted({k for r in rows for k in r.keys()})
+    # Helper: convert any complex value to JSON string (pretty or compact)
+    def _to_json_str(v: Any) -> str:
+        if v is None:
+            return ""
+        # For containers and non-primitive types, dump as pretty JSON
+        if isinstance(v, (dict, list, tuple, set)):
+            try:
+                to_dump = list(v) if isinstance(v, set) else v
+                if compact_json:
+                    return json.dumps(to_dump, ensure_ascii=False, separators=(",", ":"))
+                return json.dumps(to_dump, ensure_ascii=False, indent=2)
+            except Exception:
+                return json.dumps(str(v), ensure_ascii=False)
+        # Primitives: keep as-is but ensure string type for CSV safety
+        if isinstance(v, (int, float, bool, str)):
+            return str(v)
+        # Fallback to string
+        return str(v)
+
+    # Build header order by first-seen key order across rows, preserving
+    # the group/field order from config (JSON object order is preserved).
+    fieldnames: List[str] = []
+    for r in rows:
+        for k in r.keys():
+            if k not in fieldnames:
+                fieldnames.append(k)
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(
+            f,
+            fieldnames=fieldnames,
+            quoting=csv.QUOTE_ALL,  # quote all to avoid delimiter/newline induced misalignment
+            lineterminator="\n",
+        )
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: r.get(k, "") for k in fieldnames})
+            serialized = {k: _to_json_str(r.get(k, "")) for k in fieldnames}
+            writer.writerow(serialized)
 
 
-def write_xlsx(path: str, rows: List[Dict[str, Any]]) -> None:
+def write_xlsx(path: str, rows: List[Dict[str, Any]], *, compact_json: bool = True) -> None:
     wb = Workbook()
     ws = wb.active
     ws.title = "output"
-    headers = sorted({k for r in rows for k in r.keys()})
-    ws.append(headers)
+    # Build header order by first-seen key order across rows to reflect
+    # the [out] group/field sequence in config.
+    headers: List[str] = []
     for r in rows:
-        ws.append([r.get(h, "") for h in headers])
-    wb.save(path)
+        for k in r.keys():
+            if k not in headers:
+                headers.append(k)
+    ws.append(headers)
+    # Helper: ensure cell-friendly values; complex values -> pretty JSON string
+    def _cell_safe(v: Any) -> Any:
+        if v is None:
+            return ""
+        # Allow simple scalars
+        if isinstance(v, (int, float, bool, str)):
+            return v
+        # Convert containers and other types to pretty JSON string
+        try:
+            to_dump = list(v) if isinstance(v, set) else v
+            if compact_json:
+                return json.dumps(to_dump, ensure_ascii=False, separators=(",", ":"))
+            return json.dumps(to_dump, ensure_ascii=False, indent=2)
+        except Exception:
+            return str(v)
+
+    for r in rows:
+        ws.append([_cell_safe(r.get(h, "")) for h in headers])
+    with _suppress_openpyxl_default_style_warning():
+        wb.save(path)
 
 
 def print_terminal(rows: List[Dict[str, Any]], pretty: bool = False) -> None:
@@ -243,3 +377,20 @@ def print_terminal(rows: List[Dict[str, Any]], pretty: bool = False) -> None:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         else:
             print(json.dumps(r, ensure_ascii=False))
+
+
+@contextmanager
+def _suppress_openpyxl_default_style_warning():
+    """Suppress the common openpyxl warning when workbooks lack default style.
+
+    Message: "Workbook contains no default style, apply openpyxl's default"
+    Scope-limited to openpyxl.styles.stylesheet and only this specific message.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Workbook contains no default style, apply openpyxl's default",
+            category=UserWarning,
+            module=r"openpyxl\.styles\.stylesheet",
+        )
+        yield

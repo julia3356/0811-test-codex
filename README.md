@@ -50,11 +50,17 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
       - Produces `output/result.csv`
     - XLSX with name without extension: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f xlsx -o result`
       - Produces `output/result.xlsx`
+  - Grouped columns (one row per source row): add `--grouped`
+    - Each `[out]` object becomes one column; the cell value is that group's JSON (compact by default)
+    - Label column with `"__label__"` inside the group object; fallback labels: `group1`, `group2`, ...
+    - Example: `.venv/bin/python -m src.excel_transformer.cli tests/data/sample.xlsx -c scripts/example_config.conf -f csv --grouped`
 
 Notes
 - The `-f/--format` options are: `terminal`, `csv`, `xlsx`.
 - The input must be an `.xlsx` file; non-`.xlsx` inputs are rejected.
  - Terminal output supports `--pretty` for indented JSON.
+ - CSV/XLSX default to compact JSON for structured fields (single-line, no indentation). Use `--pretty-json` to output pretty, multi-line JSON in cells/fields. `--compact-json` is also available but enabled by default.
+ - Column order in CSV/XLSX preserves the `[out]` group/field order from config.
 
 ## Testing
 - JavaScript/TypeScript: `npm test` (coverage: `npm test -- --coverage`)

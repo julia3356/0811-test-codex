@@ -3,7 +3,13 @@ from pathlib import Path
 from typing import List, Optional
 
 from .config import load_config
-from .transform import print_terminal, transform_rows, write_csv, write_xlsx
+from .transform import (
+    print_terminal,
+    transform_rows,
+    transform_rows_grouped,
+    write_csv,
+    write_xlsx,
+)
 
 
 def _parse_rows_arg(rows: Optional[str]) -> Optional[List[int]]:
@@ -65,6 +71,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="终端输出时美化 JSON（缩进显示）",
     )
+    parser.add_argument(
+        "--compact-json",
+        action="store_true",
+        help="CSV/XLSX 输出时将结构字段写为紧凑 JSON（无缩进、单行）。默认已启用。",
+    )
+    parser.add_argument(
+        "--pretty-json",
+        action="store_true",
+        help="CSV/XLSX 输出时使用美化 JSON（多行缩进）。将覆盖默认紧凑模式。",
+    )
+    parser.add_argument(
+        "--grouped",
+        action="store_true",
+        help=(
+            "按组聚合为列：每个 [out] 对象作为一列，单元格为该组 JSON；"
+            "可在组对象顶层使用 '__label__' 指定列名，未指定时按顺序命名 group1/group2/..."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -79,14 +103,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.rows:
         row_numbers = _parse_rows_arg(args.rows)
 
-    rows = transform_rows(
-        excel_path=args.excel,
-        display_to_internal=cfg.display_to_internal,
-        out_groups=cfg.out_groups,
-        sheet_name=args.sheet,
-        header_row=args.header_row,
-        row_numbers=row_numbers,
-    )
+    # Transform according to selected output shape
+    if args.grouped and args.format in {"csv", "xlsx"}:
+        rows = transform_rows_grouped(
+            excel_path=args.excel,
+            display_to_internal=cfg.display_to_internal,
+            out_groups=cfg.out_groups,
+            sheet_name=args.sheet,
+            header_row=args.header_row,
+            row_numbers=row_numbers,
+        )
+    else:
+        rows = transform_rows(
+            excel_path=args.excel,
+            display_to_internal=cfg.display_to_internal,
+            out_groups=cfg.out_groups,
+            sheet_name=args.sheet,
+            header_row=args.header_row,
+            row_numbers=row_numbers,
+        )
 
     if args.format == "terminal":
         print_terminal(rows, pretty=args.pretty)
@@ -106,10 +141,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             name = f"{name}.xlsx"
         out_path = str(out_dir / name)
 
+        compact = True
+        if args.pretty_json:
+            compact = False
+        elif args.compact_json:
+            compact = True
+
         if args.format == "csv":
-            write_csv(out_path, rows)
+            write_csv(out_path, rows, compact_json=compact)
         else:
-            write_xlsx(out_path, rows)
+            write_xlsx(out_path, rows, compact_json=compact)
 
     return 0
 
