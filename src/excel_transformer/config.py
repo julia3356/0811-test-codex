@@ -1,4 +1,5 @@
 import json
+import ast
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
@@ -78,21 +79,26 @@ def _parse_multiple_json_objects(blob: str) -> List[Dict[str, Any]]:
                     i += 1
                     break
                 depth -= 1
-            elif ch == '"':
-                # Skip string contents safely
+            elif ch in ('"', "'"):
+                # Skip string contents safely for both double/single quoted strings
+                quote = ch
                 i += 1
                 while i < n:
                     if text[i] == '\\':
                         i += 2
                         continue
-                    if text[i] == '"':
+                    if text[i] == quote:
                         i += 1
                         break
                     i += 1
                 continue
             i += 1
         obj_raw = text[start:i]
-        obj = json.loads(obj_raw)
+        # Prefer JSON parsing; fallback to Python literal_eval to support single quotes
+        try:
+            obj = json.loads(obj_raw)
+        except Exception:
+            obj = ast.literal_eval(obj_raw)  # type: ignore[assignment]
         # Attempt to find a label on the immediate previous non-empty line
         # If not already injected by earlier step
         # Look backwards from start to previous line
@@ -150,7 +156,11 @@ def load_config(path: str) -> Config:
         if not blob:
             continue
         if name == "map":
-            j = json.loads(_strip_json_comments(blob))
+            cleaned = _strip_json_comments(blob)
+            try:
+                j = json.loads(cleaned)
+            except Exception:
+                j = ast.literal_eval(cleaned)
             if not isinstance(j, dict):
                 raise ValueError("[map] must be a single JSON object")
             display_to_internal = {str(k): str(v) for k, v in j.items()}
