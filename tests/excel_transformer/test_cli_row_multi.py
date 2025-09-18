@@ -22,6 +22,17 @@ def _write_sample_xlsx(path: Path) -> None:
     wb.save(str(path))
 
 
+def _write_many_rows_xlsx(path: Path, n: int = 16) -> None:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(["原始记录", "计分", "原始记录-问题", "问题的积分", "标准回答", "猜测回答"])
+    for i in range(n):
+        idx = i + 1
+        ws.append([f"记录{idx}", idx % 5, f"问题{idx}", (idx * 3) % 10, f"标准答{idx}", f"猜测答{idx}"])
+    wb.save(str(path))
+
+
 def test_cli_row_accepts_comma_separated_multi_rows_csv(tmp_path, monkeypatch):
     excel_path = tmp_path / "sample.xlsx"
     _write_sample_xlsx(excel_path)
@@ -91,3 +102,40 @@ def test_cli_row_accepts_bracket_range_xlsx(tmp_path, monkeypatch):
     ws = wb.active
     # header row + 2 data rows
     assert ws.max_row == 3
+
+
+def test_cli_row_accepts_mixed_numbers_and_bracket_range_csv(tmp_path, monkeypatch):
+    excel_path = tmp_path / "sample_many.xlsx"
+    _write_many_rows_xlsx(excel_path, n=16)
+    cfg_path = REPO_ROOT / "scripts" / "example_config.conf"
+
+    monkeypatch.chdir(tmp_path)
+
+    expr = "1,4,7,[9,13],10"
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "csv", "--row", expr])
+    assert rc == 0
+
+    out_csv = tmp_path / "output" / "sample_many.csv"
+    assert out_csv.exists()
+    content = out_csv.read_text(encoding="utf-8-sig")
+    # header + requested rows (1,4,7,9,10,11,12,13,10) -> at least 9 data lines
+    assert content.strip().count("\n") >= 9
+
+
+def test_cli_row_accepts_mixed_numbers_and_bracket_range_xlsx(tmp_path, monkeypatch):
+    excel_path = tmp_path / "sample_many.xlsx"
+    _write_many_rows_xlsx(excel_path, n=16)
+    cfg_path = REPO_ROOT / "scripts" / "example_config.conf"
+
+    monkeypatch.chdir(tmp_path)
+
+    expr = "1,4,7,[9,13],10"
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "xlsx", "--row", expr])
+    assert rc == 0
+
+    out_xlsx = tmp_path / "output" / "sample_many.xlsx"
+    assert out_xlsx.exists()
+    wb = openpyxl.load_workbook(out_xlsx)
+    ws = wb.active
+    # header + 9 data rows expected (allowing duplicates)
+    assert ws.max_row >= 10

@@ -14,29 +14,53 @@ from .transform import (
 )
 
 
+def _split_top_level_commas(s: str) -> List[str]:
+    parts: List[str] = []
+    buf: List[str] = []
+    depth = 0
+    for ch in s:
+        if ch == ',' and depth == 0:
+            part = ''.join(buf).strip()
+            if part:
+                parts.append(part)
+            buf = []
+            continue
+        if ch == '[':
+            depth += 1
+        elif ch == ']':
+            depth = max(0, depth - 1)
+        buf.append(ch)
+    last = ''.join(buf).strip()
+    if last:
+        parts.append(last)
+    return parts
+
+
 def _parse_rows_arg(rows: Optional[str]) -> Optional[List[int]]:
     if not rows:
         return None
     result: List[int] = []
     s = rows.strip()
-    # Support bracket syntax: [a,b] -> inclusive range a..b; or [a,b,c] -> explicit list
-    if s.startswith("[") and s.endswith("]"):
-        try:
-            arr = json.loads(s)
-        except Exception:
-            arr = ast.literal_eval(s)
-        if isinstance(arr, list):
-            if len(arr) == 2 and all(isinstance(x, int) for x in arr):
-                a, b = arr
-                lo, hi = (a, b) if a <= b else (b, a)
-                return list(range(lo, hi + 1))
-            # treat as explicit list
-            return [int(x) for x in arr]
-    # Fallback: comma-separated items, with optional ranges like 2-5
-    for part in s.split(","):
+    # Split by top-level commas, so bracketed sections remain intact
+    parts = _split_top_level_commas(s)
+    for part in parts:
         part = part.strip()
         if not part:
             continue
+        # Bracket sub-expression: [a,b] range or explicit list
+        if part.startswith("[") and part.endswith("]"):
+            try:
+                arr = json.loads(part)
+            except Exception:
+                arr = ast.literal_eval(part)
+            if isinstance(arr, list):
+                if len(arr) == 2 and all(isinstance(x, int) for x in arr):
+                    a, b = arr
+                    lo, hi = (a, b) if a <= b else (b, a)
+                    result.extend(list(range(lo, hi + 1)))
+                    continue
+                result.extend(int(x) for x in arr)
+                continue
         if "-" in part:
             a, b = part.split("-", 1)
             start, end = int(a), int(b)
