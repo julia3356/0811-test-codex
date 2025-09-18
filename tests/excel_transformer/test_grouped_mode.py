@@ -10,6 +10,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.excel_transformer.cli import main as cli_main  # noqa: E402
+from src.excel_transformer.config import load_config  # noqa: E402
+from src.excel_transformer.transform import transform_rows  # noqa: E402
 
 
 def _write_config(path: Path, content: str) -> None:
@@ -289,3 +291,73 @@ def test_grouped_xlsx_multiple_rows_pretty_json(tmp_path, monkeypatch):
     assert g1_r2 == {"原始记录": "记录B", "计分": 2}
     assert g2_r2 == {"原始记录-问题": "问题B", "问题的积分": 8}
     assert g3_r2 == {"原始记录": "记录B", "回答": "猜测答B"}
+
+
+def test_grouped_csv_label_line_syntax_headers(tmp_path, monkeypatch):
+    excel_path = REPO_ROOT / "tests" / "data" / "sample.xlsx"
+
+    cfg_text = (
+        """
+        [map]
+        {
+          "原始记录": "record",
+          "计分": "score",
+          "原始记录-问题": "ask",
+          "问题的积分": "ask_score",
+          "标准回答": "answer-1",
+          "猜测回答": "answer-2"
+        }
+
+        [out]
+        输入区:
+        { "原始记录": "record", "计分": "score" }
+        校验区:
+        { "原始记录-问题": "ask", "问题的积分": "ask_score" }
+        回答区:
+        { "原始记录": "record", "回答": { "name": "answer", "value": "answer-1", "ex": { "if": "score==2", "value": "answer-2" } } }
+        """
+    )
+    cfg_path = tmp_path / "cfg_label_lines.conf"
+    _write_config(cfg_path, cfg_text)
+
+    monkeypatch.chdir(tmp_path)
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "csv", "--grouped", "--row", "1"])
+    assert rc == 0
+
+    out_csv = tmp_path / "output" / "sample.csv"
+    with out_csv.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+
+    assert header == ["输入区", "校验区", "回答区"]
+
+
+def test_terminal_output_includes_label_value(tmp_path):
+    excel_path = REPO_ROOT / "tests" / "data" / "sample.xlsx"
+
+    cfg_text = (
+        """
+        [map]
+        {
+          "原始记录": "record",
+          "计分": "score"
+        }
+
+        [out]
+        输入区:
+        { "__label__": "输入区", "原始记录": "record", "计分": "score" }
+        """
+    )
+    cfg_path = tmp_path / "cfg_terminal_label.conf"
+    _write_config(cfg_path, cfg_text)
+
+    cfg = load_config(str(cfg_path))
+    rows = transform_rows(
+        excel_path=str(excel_path),
+        display_to_internal=cfg.display_to_internal,
+        out_groups=cfg.out_groups,
+        header_row=1,
+        row_numbers=[1],
+    )
+    # Only one group -> single record with __label__ backfilled
+    assert rows[0]["__label__"] == "输入区"

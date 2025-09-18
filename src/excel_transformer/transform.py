@@ -101,6 +101,10 @@ def _resolve_field(
       in this case, recursively resolve each child to produce a nested dict. This supports
       multi-level nesting (情况三及更深层次)。
     """
+    # Special-case: __label__ should pass through as literal if provided
+    if field_key == "__label__":
+        return field_key, (spec if isinstance(spec, str) else str(spec))
+
     # Case 1: direct mapping (spec is internal key to fetch; output key is the field key)
     if isinstance(spec, str):
         output_key = field_key

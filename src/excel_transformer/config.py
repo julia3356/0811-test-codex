@@ -24,10 +24,16 @@ def _strip_json_comments(s: str) -> str:
 def _parse_multiple_json_objects(blob: str) -> List[Dict[str, Any]]:
     """Parse one or more top-level JSON objects concatenated in text.
 
-    The text can contain whitespace between objects.
+    Extensions supported for [out]:
+    - Optional label lines directly above an object, like:
+        Label:
+        { ... }
+      This will be injected into the object as {"__label__": "Label", ...}.
+
+    JSON may include // comments and trailing commas (handled earlier).
     """
     items: List[Dict[str, Any]] = []
-    text = _strip_json_comments(blob).strip()
+    text = _strip_json_comments(blob)
     i = 0
     n = len(text)
     while i < n:
@@ -36,19 +42,42 @@ def _parse_multiple_json_objects(blob: str) -> List[Dict[str, Any]]:
             i += 1
         if i >= n:
             break
+        # Find the next object start '{'
         if text[i] != "{":
-            raise ValueError("Expected '{' starting a JSON object in [out] section")
+            # Allow an optional single-line label ending with ':' before the object
+            # Capture the line up to ':' and then expect '{' after optional whitespace/newline.
+            # Move to the next non-space
+            label_start = i
+            # Read to line end
+            while i < n and text[i] != '\n' and text[i] != '{':
+                i += 1
+            # If we stopped at '{' on same line, backtrack to find ':'
+            line = text[label_start:i]
+            label_val: str | None = None
+            if ':' in line:
+                # Take content before ':'
+                label_candidate = line.split(':', 1)[0].strip()
+                if label_candidate:
+                    label_val = label_candidate
+            # Now skip to next '{'
+            while i < n and text[i] != '{':
+                i += 1
+            if i >= n:
+                break
+            # From here, i points to '{' and label_val holds an optional label
+        # Parse JSON object from i (which is '{')
         depth = 0
         start = i
+        i += 1
         while i < n:
             ch = text[i]
             if ch == '{':
                 depth += 1
             elif ch == '}':
-                depth -= 1
                 if depth == 0:
                     i += 1
                     break
+                depth -= 1
             elif ch == '"':
                 # Skip string contents safely
                 i += 1
@@ -64,6 +93,24 @@ def _parse_multiple_json_objects(blob: str) -> List[Dict[str, Any]]:
             i += 1
         obj_raw = text[start:i]
         obj = json.loads(obj_raw)
+        # Attempt to find a label on the immediate previous non-empty line
+        # If not already injected by earlier step
+        # Look backwards from start to previous line
+        if '__label__' not in obj:
+            j = start - 1
+            # Skip whitespace backwards
+            while j >= 0 and text[j].isspace():
+                # stop at newline but keep going to find previous line start
+                j -= 1
+            # Find line start
+            line_end = j
+            while j >= 0 and text[j] != '\n':
+                j -= 1
+            line_start = j + 1
+            prev_line = text[line_start:line_end + 1]
+            pl = prev_line.strip()
+            if pl.endswith(':') and pl[:-1].strip():
+                obj['__label__'] = pl[:-1].strip()
         items.append(obj)
     return items
 
@@ -116,4 +163,3 @@ def load_config(path: str) -> Config:
         raise ValueError("Missing or empty [out] section in config")
 
     return Config(display_to_internal=display_to_internal, out_groups=out_groups)
-
