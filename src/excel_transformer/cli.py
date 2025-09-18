@@ -46,8 +46,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument(
         "--row",
-        type=int,
-        help="只处理指定行（数据行号，从1开始，不含表头）",
+        type=str,
+        help="处理一行或多行：可为单个数字，或使用逗号/区间（如 2,3,9 或 2-5,9）",
     )
     parser.add_argument(
         "--rows",
@@ -98,8 +98,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     cfg = load_config(args.config)
     row_numbers = None
-    if args.row is not None:
-        row_numbers = [int(args.row)]
+    if args.row:
+        row_numbers = _parse_rows_arg(args.row)
     elif args.rows:
         row_numbers = _parse_rows_arg(args.rows)
 

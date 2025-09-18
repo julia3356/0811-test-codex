@@ -54,6 +54,9 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
     - Each `[out]` object becomes one column; the cell value is that group's JSON (compact by default)
     - Column names come only from `"__label__"` in each group; if missing, auto `group1/group2/...`
     - One source row -> one output row. Fields inside a group are not expanded into multiple columns.
+  - Row selection
+    - Single row: `--row 2`
+    - Multiple rows: `--row 2,3,9` or ranges `--row 2-5,9`
 
 Notes
 - The `-f/--format` options are: `terminal`, `csv`, `xlsx`.
