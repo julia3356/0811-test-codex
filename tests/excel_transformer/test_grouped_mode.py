@@ -361,3 +361,86 @@ def test_terminal_output_includes_label_value(tmp_path):
     )
     # Only one group -> single record with __label__ backfilled
     assert rows[0]["__label__"] == "输入区"
+
+
+def test_grouped_preserves_newlines_in_cell_csv(tmp_path, monkeypatch):
+    # Create a workbook with newline in a cell
+    import openpyxl
+
+    excel_path = tmp_path / "nl.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["原始记录"])  # header
+    ws.append(["行一\n行二"])  # data row with newline
+    wb.save(str(excel_path))
+
+    cfg_text = (
+        """
+        [map]
+        { "原始记录": "record" }
+
+        [out]
+        { "__label__": "A", "原始记录": "record" }
+        """
+    )
+    cfg_path = tmp_path / "cfg.conf"
+    _write_config(cfg_path, cfg_text)
+
+    monkeypatch.chdir(tmp_path)
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "csv", "--grouped", "--row", "1"])
+    assert rc == 0
+
+    import csv, json
+
+    out_csv = tmp_path / "output" / "nl.csv"
+    # Our CLI derives name from input, so expect nl.csv
+    out_csv = tmp_path / "output" / "nl.csv"
+    assert out_csv.exists()
+    with out_csv.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        row = next(reader)
+        # Ensure exactly one data row and one cell
+        with_next = list(reader)
+    assert header == ["A"]
+    assert len(with_next) == 0  # no extra rows caused by newline split
+    obj = json.loads(row[0])
+    assert obj["原始记录"].split("\n") == ["行一", "行二"]
+
+
+def test_grouped_preserves_newlines_in_cell_xlsx(tmp_path, monkeypatch):
+    # Create a workbook with newline in a cell
+    import openpyxl, json
+
+    excel_path = tmp_path / "nl.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["原始记录"])  # header
+    ws.append(["行一\n行二"])  # data row with newline
+    wb.save(str(excel_path))
+
+    cfg_text = (
+        """
+        [map]
+        { "原始记录": "record" }
+
+        [out]
+        { "__label__": "A", "原始记录": "record" }
+        """
+    )
+    cfg_path = tmp_path / "cfg.conf"
+    _write_config(cfg_path, cfg_text)
+
+    monkeypatch.chdir(tmp_path)
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "xlsx", "--grouped", "--row", "1"])
+    assert rc == 0
+
+    out_xlsx = tmp_path / "output" / "nl.xlsx"
+    assert out_xlsx.exists()
+    wb2 = openpyxl.load_workbook(out_xlsx)
+    ws2 = wb2.active
+    headers = [c.value for c in ws2[1]]
+    row = [c.value for c in ws2[2]]
+    assert headers == ["A"]
+    obj = json.loads(row[0])
+    assert obj["原始记录"].split("\n") == ["行一", "行二"]
