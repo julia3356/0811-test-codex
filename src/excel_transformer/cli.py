@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from .config import load_config
+import json
+import ast
 from .transform import (
     print_terminal,
     transform_rows,
@@ -16,7 +18,22 @@ def _parse_rows_arg(rows: Optional[str]) -> Optional[List[int]]:
     if not rows:
         return None
     result: List[int] = []
-    for part in rows.split(","):
+    s = rows.strip()
+    # Support bracket syntax: [a,b] -> inclusive range a..b; or [a,b,c] -> explicit list
+    if s.startswith("[") and s.endswith("]"):
+        try:
+            arr = json.loads(s)
+        except Exception:
+            arr = ast.literal_eval(s)
+        if isinstance(arr, list):
+            if len(arr) == 2 and all(isinstance(x, int) for x in arr):
+                a, b = arr
+                lo, hi = (a, b) if a <= b else (b, a)
+                return list(range(lo, hi + 1))
+            # treat as explicit list
+            return [int(x) for x in arr]
+    # Fallback: comma-separated items, with optional ranges like 2-5
+    for part in s.split(","):
         part = part.strip()
         if not part:
             continue

@@ -57,6 +57,7 @@ This repo includes a small Excel-to-structured-output CLI under `src/excel_trans
   - Row selection
     - Single row: `--row 2`
     - Multiple rows: `--row 2,3,9` or ranges `--row 2-5,9`
+    - Bracket range: `--row [2,10]` (inclusive)
 
 Notes
 - The `-f/--format` options are: `terminal`, `csv`, `xlsx`.

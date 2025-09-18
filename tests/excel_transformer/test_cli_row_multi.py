@@ -56,3 +56,38 @@ def test_cli_row_accepts_range_multi_rows_xlsx(tmp_path, monkeypatch):
     # header row + 2 data rows
     assert ws.max_row == 3
 
+
+def test_cli_row_accepts_bracket_range_csv(tmp_path, monkeypatch):
+    excel_path = tmp_path / "sample.xlsx"
+    _write_sample_xlsx(excel_path)
+    cfg_path = REPO_ROOT / "scripts" / "example_config.conf"
+
+    monkeypatch.chdir(tmp_path)
+
+    # Bracket syntax [1,2] meaning inclusive range 1..2
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "csv", "--row", "[1,2]"])
+    assert rc == 0
+
+    out_csv = tmp_path / "output" / "sample.csv"
+    assert out_csv.exists()
+    content = out_csv.read_text(encoding="utf-8-sig")
+    # header + 2 data rows
+    assert content.count("\n") >= 2
+
+
+def test_cli_row_accepts_bracket_range_xlsx(tmp_path, monkeypatch):
+    excel_path = tmp_path / "sample.xlsx"
+    _write_sample_xlsx(excel_path)
+    cfg_path = REPO_ROOT / "scripts" / "example_config.conf"
+
+    monkeypatch.chdir(tmp_path)
+
+    rc = cli_main([str(excel_path), "-c", str(cfg_path), "-f", "xlsx", "--row", "[1,2]"])
+    assert rc == 0
+
+    out_xlsx = tmp_path / "output" / "sample.xlsx"
+    assert out_xlsx.exists()
+    wb = openpyxl.load_workbook(out_xlsx)
+    ws = wb.active
+    # header row + 2 data rows
+    assert ws.max_row == 3
