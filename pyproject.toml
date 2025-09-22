@@ -5,8 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "pandas>=2.0.0",
+    "requests>=2.32.0",
     "openpyxl>=3.1.5",
 ]
+
+# ↓↓↓ 追加：脚本入口（支持 uv run wf-batch-runner）
+[project.scripts]
+wf-batch-runner = "wf_batch_runner.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -63,4 +69,4 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["excel_transformer*"]
+include = ["excel_transformer*", "wf_batch_runner*"]

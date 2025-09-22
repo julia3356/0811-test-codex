@@ -1,0 +1,28 @@
+{
+  "request": {
+    "inputs": {
+      "input": { "from": "input" },
+      "check": { "from": "check", "as": "json_string" },
+      "meta": { "const": "batch" }
+    },
+    "user": { "from": "user", "default": "cli-runner" },
+    "response_mode": { "const": "blocking" }
+  },
+  "base": "data.outputs",
+  "include_all": true,
+  "columns": [
+    { "name": "task_id", "path": "$.task_id" },
+    { "name": "workflow_run_id", "path": "$.workflow_run_id" },
+    { "name": "llm_out", "path": "llm_out" },
+    { "name": "judge.schema_ok", "path": "llm_judge.schema_ok" },
+    { "name": "judge.score", "path": "llm_judge.score" },
+    { "name": "judge.scores", "path": "llm_judge.scores" },
+    { "name": "judge.diagnostics", "path": "llm_judge.diagnostics" },
+    { "name": "judge.usage", "path": "judge_usage" },
+    { "name": "session", "path": "session" },
+    { "name": "check", "path": "check" },
+    { "name": "error", "path": "$.error" },
+    { "name": "workflow_id", "path": "$.data.workflow_id" },
+    { "name": "status", "path": "$.data.status" }
+  ]
+}

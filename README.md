@@ -66,6 +66,84 @@ Notes
  - CSV/XLSX default to compact JSON for structured fields (single-line, no indentation). Use `--pretty-json` to output pretty, multi-line JSON in cells/fields. `--compact-json` is also available but enabled by default.
  - Column order in CSV/XLSX preserves the `[out]` group/field order from config.
 
+## WF Batch Runner (Python)
+批量读取 Excel/CSV，逐行调用工作流接口，并把结果写回 Excel/CSV。
+
+- 模块：`src/wf_batch_runner/cli.py`
+- 依赖：`pandas`, `requests`, `openpyxl`
+
+用法
+- 基本（固定列导出，保持向后兼容）：
+  - `.venv/bin/python -m src.wf_batch_runner.cli -i input.xlsx -o out.xlsx --token app-xxxx`
+  - 也支持 CSV：`-i data.csv -o result.csv`
+
+- 终端友好输出（逐行跑时镜像关键字段）：
+  - 加 `--tee 1`
+
+- 控制是否美化输出：
+  - `--pretty 1|0`（默认 1）。美化包括：
+    - Markdown 包裹的 JSON 自动提取 + 缩进
+    - 常见转义字符（\n、\t、\r、\"、\\）人类可读化
+
+- 配置驱动导出列（推荐）：
+  - 通过 `--config assets/mapping.json` 指定 JSON 配置，描述如何从响应主体中选择字段并映射为输出列。
+  - 根对象结构：
+    ```json
+    {
+      "task_id": "...",
+      "workflow_run_id": "...",
+      "data": {
+        "workflow_id": "...",
+        "status": "succeeded",
+        "outputs": { /* 工作流节点返回 */ }
+      },
+      "error": null
+    }
+    ```
+
+配置文件格式（JSON）
+```json
+{
+  "request": {
+    "inputs": {
+      "input": { "from": "input" },
+      "check": { "from": "check", "as": "json_string" },
+      "meta": { "const": "batch" }
+    },
+    "user": { "from": "user", "default": "cli-runner" },
+    "response_mode": { "const": "blocking" }
+  },
+  "base": "data.outputs",
+  "include_all": false,
+  "columns": [
+    { "name": "llm_out", "path": "llm_out" },
+    { "name": "judge.schema_ok", "path": "llm_judge.schema_ok" },
+    { "name": "judge.score", "path": "llm_judge.score" },
+    { "name": "raw_error", "path": "$.error" }
+  ]
+}
+```
+
+说明
+- `path` 以 `$.` 开头：从根对象取值；否则相对 `base`。
+- 当 `include_all: true` 时，会将 `base` 下嵌套对象扁平化为点号连接的列名并附加到结果（不会覆盖 `columns` 已定义列）。
+- 不提供 `--config` 时，导出默认固定列（兼容旧版本）。
+- `request`：将输入文件的列映射到 Dify 请求的 `inputs`、`user` 与 `response_mode`。
+  - `inputs` 值支持：
+    - 字符串：视为列名；
+    - 对象：`{"from": "col", "as": "json|json_string|string"}` 或 `{"const": any}`；
+    - `json` 会解析单元格为 JSON 结构；`json_string` 会将其序列化为紧凑 JSON 字符串；
+  - `user` 支持字符串列名或对象定义（同上），为空时回退 `cli-runner`；
+  - `response_mode` 可设为 `blocking` 或 `streaming`（字符串），或对象定义。
+
+示例
+- 示例文件：`assets/mapping.json`
+- 执行：
+  - `.venv/bin/python -m src.wf_batch_runner.cli -i tests/data/sample.xlsx -o output/batch.xlsx --token app-xxxx --config assets/mapping.json --pretty 1`
+
+输出
+- `-o/--out` 指定的 Excel/CSV 文件，列顺序遵循配置中的 `columns`，若有 `include_all: true` 则追加自动展开列。
+
 ## Testing
 - JavaScript/TypeScript: `npm test` (coverage: `npm test -- --coverage`)
 - Python: `pytest -q` (coverage: `pytest --cov=src`)
