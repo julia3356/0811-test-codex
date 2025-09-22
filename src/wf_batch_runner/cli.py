@@ -533,6 +533,14 @@ def main(argv: Optional[list[str]] = None) -> None:
                             row_out[k] = _render_value(v, bool(args.pretty))
 
             results.append(row_out)
+            # 增量写出：根据“当前已收集的结果”生成 DataFrame 并落盘
+            if not bool(args.debug):
+                all_keys: List[str] = []
+                for r in results:
+                    for k in r.keys():
+                        if k not in all_keys:
+                            all_keys.append(k)
+                _write_table(pd.DataFrame(results, columns=all_keys), out_path)
         else:
             # 兼容原有固定列
             results.append({
@@ -551,41 +559,34 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "llm_judge.scores": res.llm_judge_scores or "",
                 "llm_judge.diagnostics": res.llm_judge_diagnostics or "",
             })
+            # 增量写出：固定列顺序
+            if not bool(args.debug):
+                fixed_cols = [
+                    "task_id",
+                    "workflow_run_id",
+                    "data.workflow_id",
+                    "data.status",
+                    "data.outputs.llm_out",
+                    "data.outputs.llm_judge",
+                    "data.outputs.judge_usage",
+                    "data.outputs.check",
+                    "data.outputs.session",
+                    "error",
+                    "llm_judge.schema_ok",
+                    "llm_judge.score",
+                    "llm_judge.scores",
+                    "llm_judge.diagnostics",
+                ]
+                _write_table(pd.DataFrame(results, columns=fixed_cols), out_path)
 
     # 调试模式：不写入输出文件，直接返回
     if bool(args.debug):
         print("ℹ️ Debug 模式：已打印请求预览，忽略 -o 输出写入。")
         return
 
-    # 输出
-    if conf:
-        # 动态列：以第一行的键集合为主，后续缺失填空
-        all_keys: List[str] = []
-        for r in results:
-            for k in r.keys():
-                if k not in all_keys:
-                    all_keys.append(k)
-        out_df = pd.DataFrame(results, columns=all_keys)
-    else:
-        out_df = pd.DataFrame(results, columns=[
-            "task_id",
-            "workflow_run_id",
-            "data.workflow_id",
-            "data.status",
-            "data.outputs.llm_out",
-            "data.outputs.llm_judge",
-            "data.outputs.judge_usage",
-            "data.outputs.check",
-            "data.outputs.session",
-            "error",
-            # ↓↓↓ 新增：放在 error 后
-            "llm_judge.schema_ok",
-            "llm_judge.score",
-            "llm_judge.scores",
-            "llm_judge.diagnostics",
-        ])
-    _write_table(out_df, out_path)
-    print(f"✅ 完成：输出写入 {out_path}")
+    # 最终提示（非 debug 下，此时文件已在循环中逐步写出）
+    if not bool(args.debug):
+        print(f"✅ 完成：输出写入 {out_path}")
 
 
 if __name__ == "__main__":
