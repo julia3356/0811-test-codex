@@ -127,6 +127,7 @@ Notes
 说明
 - `path` 以 `$.` 开头：从根对象取值；否则相对 `base`。
 - 当 `include_all: true` 时，会将 `base` 下嵌套对象扁平化为点号连接的列名并附加到结果（不会覆盖 `columns` 已定义列）。
+- 当 `include_all: true` 与 `columns` 同时使用时，若某个 `base` 下的键已通过 `columns` 指定了映射（例如 `{ "name": "V-0922", "path": "output_1" }`），则自动展开时会跳过该键，避免在输出中同时出现自定义列名与原始键名（如同时出现 `V-0922` 与 `output_1`）。
 - 不提供 `--config` 时，导出默认固定列（兼容旧版本）。
 - `request`：将输入文件的列映射到 Dify 请求的 `inputs`、`user` 与 `response_mode`。
   - `inputs` 值支持：
@@ -143,6 +144,19 @@ Notes
 
 输出
 - `-o/--out` 指定的 Excel/CSV 文件，列顺序遵循配置中的 `columns`，若有 `include_all: true` 则追加自动展开列。
+
+去重示例（含 include_all）
+```jsonc
+{
+  "request": { /* 省略 */ },
+  "base": "data.outputs",
+  "include_all": true,
+  "columns": [
+    { "name": "V-0922", "path": "output_1" }
+  ]
+}
+```
+说明：当响应中存在 `data.outputs.output_1` 时，输出表只包含列 `V-0922`，其值取自 `output_1`；不会再额外生成名为 `output_1` 的列。
 
 ## Testing
 - JavaScript/TypeScript: `npm test` (coverage: `npm test -- --coverage`)
