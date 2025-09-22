@@ -129,6 +129,7 @@ def _call_api(
     timeout: float,
     response_mode: str,
     pretty: bool,
+    debug: bool = False,
 ) -> RunResult:
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {
@@ -136,6 +137,16 @@ def _call_api(
         "response_mode": response_mode or "blocking",
         "user": user_val or "cli-runner",
     }
+    # 调试模式：仅打印将要发送的请求，不实际发起网络调用
+    if debug:
+        safe_token = "" if not token else (token[:6] + "..." + str(len(token)))
+        dbg_headers = {**headers, "Authorization": f"Bearer {safe_token}"}
+        print("[DEBUG] Dify request preview:")
+        print(f"URL: {url}")
+        print(f"Headers: {json.dumps(dbg_headers, ensure_ascii=False)}")
+        print("Body:")
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return RunResult(status="debug", outputs_raw={})
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
         resp.raise_for_status()
@@ -403,6 +414,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     ap.add_argument("--tee", type=int, default=0, help="同时人类友好格式输出到终端（1 开启）")
     ap.add_argument("--config", type=str, default=None, help="JSON 配置文件，描述 outputs 的列映射")
     ap.add_argument("--pretty", type=int, default=1, help="是否美化输出（1=是，0=否）")
+    ap.add_argument("--debug", type=int, default=0, help="调试模式：仅打印将发送的 Dify 请求，不实际调用，且忽略 -o 文件写入（1 开启）")
 
     args = ap.parse_args(argv)
 
@@ -433,7 +445,16 @@ def main(argv: Optional[list[str]] = None) -> None:
         # 为避免修改 _call_api 签名过多，这里复用 _call_api 并在其内使用默认 blocking，后续如需 streaming 可扩展。
         # 目前兼容：若配置中指定了非 blocking，仅通过 payload.response_mode 传递即可。
 
-        res = _call_api(args.url, args.token, inputs_payload, user_val, args.timeout, response_mode, bool(args.pretty))
+        res = _call_api(
+            args.url,
+            args.token,
+            inputs_payload,
+            user_val,
+            args.timeout,
+            response_mode,
+            bool(args.pretty),
+            bool(args.debug),
+        )
         if args.tee == 1:
             _tee_print(res)
         if conf:
@@ -503,6 +524,11 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "llm_judge.scores": res.llm_judge_scores or "",
                 "llm_judge.diagnostics": res.llm_judge_diagnostics or "",
             })
+
+    # 调试模式：不写入输出文件，直接返回
+    if bool(args.debug):
+        print("ℹ️ Debug 模式：已打印请求预览，忽略 -o 输出写入。")
+        return
 
     # 输出
     if conf:
