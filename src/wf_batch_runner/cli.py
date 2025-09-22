@@ -101,6 +101,33 @@ def _pretty_json(val: Any) -> str:
         return str(val)
 
 
+def _get_row_value(row: pd.Series, col: Any) -> Any:
+    """健壮地从行中取列值：
+    - 优先精确匹配列名；
+    - 其次尝试去除首尾空白后的列名；
+    - 再次尝试不区分大小写 + 去空白匹配；
+    找不到则返回 None。
+    """
+    if not isinstance(row, pd.Series):
+        return None
+    try:
+        # 精确匹配
+        if col in row.index:
+            return row[col]
+        # 去空白匹配
+        col_s = str(col).strip()
+        if col_s in row.index:
+            return row[col_s]
+        # 不区分大小写 + 去空白
+        norm = {str(k).strip().lower(): k for k in row.index}
+        key = col_s.lower()
+        if key in norm:
+            return row[norm[key]]
+    except Exception:
+        return None
+    return None
+
+
 @dataclass
 class RunResult:
     task_id: Optional[str] = None
@@ -313,7 +340,7 @@ def _resolve_value_from_spec(spec: Any, row: pd.Series) -> Any:
             return spec.get("const")
         if "from" in spec:
             col = spec["from"]
-            val = None if col not in row else row[col]
+            val = _get_row_value(row, col)
             if _is_nan(val):
                 return spec.get("default", "")
             cast = spec.get("as")
@@ -337,7 +364,7 @@ def _resolve_value_from_spec(spec: Any, row: pd.Series) -> Any:
         return None
     # 字符串列名
     if isinstance(spec, str):
-        val = None if spec not in row else row[spec]
+        val = _get_row_value(row, spec)
         if _is_nan(val):
             return ""
         return val if isinstance(val, (dict, list)) else str(val)
