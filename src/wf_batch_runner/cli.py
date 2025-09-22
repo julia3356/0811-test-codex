@@ -500,6 +500,8 @@ def main(argv: Optional[list[str]] = None) -> None:
             base = conf.get("base") or "data.outputs"
             include_all = bool(conf.get("include_all", False))
             cols_cfg = conf.get("columns") or []
+            # 记录在 base 下已通过 columns 明确映射的相对路径（避免 include_all 重复添加同一路径为列名）
+            mapped_under_base: set[str] = set()
 
             row_out: Dict[str, Any] = {
                 "task_id": res.task_id or "",
@@ -520,6 +522,8 @@ def main(argv: Optional[list[str]] = None) -> None:
                 else:
                     rel = path if base == "" else f"{base}.{path}"
                     v = _get_by_path(root_obj, rel)
+                    # 仅记录 base 下的相对路径 key（与 include_all 的扁平 key 一致）
+                    mapped_under_base.add(path)
                 row_out[name] = _render_value(v, bool(args.pretty))
 
             # 自动展开 outputs
@@ -528,8 +532,8 @@ def main(argv: Optional[list[str]] = None) -> None:
                 if isinstance(base_obj, dict):
                     flat = _flatten_dict(base_obj)
                     for k, v in flat.items():
-                        # 不覆盖已配置列
-                        if k not in row_out:
+                        # 不覆盖已配置列；且跳过已通过 columns 指定过的 base 相对路径
+                        if k not in row_out and k not in mapped_under_base:
                             row_out[k] = _render_value(v, bool(args.pretty))
 
             results.append(row_out)
