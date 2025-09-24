@@ -148,6 +148,20 @@ class RunResult:
     # 原始 outputs 结构，供后续按配置抽取
     outputs_raw: Optional[Dict[str, Any]] = None
 
+def _mask_token(tok: str, head: int = 6, tail: int = 4) -> str:
+    """Mask token for logs: keep head and tail, mask middle.
+    - If token is too short, keep first/last char and mask the middle.
+    """
+    if not tok:
+        return ""
+    t = str(tok)
+    if len(t) <= head + tail:
+        if len(t) <= 2:
+            return t if len(t) <= 1 else (t[0] + "*")
+        return t[0] + ("*" * (len(t) - 2)) + t[-1]
+    return t[:head] + "..." + t[-tail:]
+
+
 def _call_api(
     url: str,
     token: str,
@@ -158,21 +172,35 @@ def _call_api(
     pretty: bool,
     debug: bool = False,
 ) -> RunResult:
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    # 规范化 token：兼容传入已含有前缀的情况（如 "Bearer xxx"）
+    raw_token = (token or "").strip()
+    if raw_token.lower().startswith("bearer "):
+        raw_token = raw_token[7:].strip()
+
+    headers = {"Authorization": f"Bearer {raw_token}", "Content-Type": "application/json"}
     payload = {
         "inputs": inputs_payload,
         "response_mode": response_mode or "blocking",
         "user": user_val or "cli-runner",
     }
-    # 调试模式：仅打印将要发送的请求，不实际发起网络调用
+    # 调试模式：打印请求预览与可直接执行的 curl 命令，不实际发起网络调用
     if debug:
-        safe_token = "" if not token else (token[:6] + "..." + str(len(token)))
+        safe_token = _mask_token(raw_token)
         dbg_headers = {**headers, "Authorization": f"Bearer {safe_token}"}
         print("[DEBUG] Dify request preview:")
         print(f"URL: {url}")
         print(f"Headers: {json.dumps(dbg_headers, ensure_ascii=False)}")
         print("Body:")
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        payload_pretty = json.dumps(payload, ensure_ascii=False, indent=2)
+        print(payload_pretty)
+        # 直接可用的 curl 命令（使用真实 Token）
+        print("\n[DEBUG] cURL（可直接复制执行）:")
+        print(f"curl -X POST '{url}' \")
+        print(f"  -H 'Authorization: Bearer {raw_token}' \")
+        print("  -H 'Content-Type: application/json' \")
+        print("  --data-binary @- <<'JSON'")
+        print(payload_pretty)
+        print("JSON")
         return RunResult(status="debug", outputs_raw={})
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
@@ -442,6 +470,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     ap.add_argument("--config", type=str, default=None, help="JSON 配置文件，描述 outputs 的列映射")
     ap.add_argument("--pretty", type=int, default=1, help="是否美化输出（1=是，0=否）")
     ap.add_argument("--debug", type=int, default=0, help="调试模式：仅打印将发送的 Dify 请求，不实际调用，且忽略 -o 文件写入（1 开启）")
+    ap.add_argument("--row", type=int, default=0, help="调试模式下指定行号（从 1 开始，仅处理该行）")
+    ap.add_argument("--fast-append", type=int, default=0, help="容错与长批量优化：检测已存在的输出并跳过已处理行；CSV 采用逐行追加，Excel 采用合并重写（1 开启）")
 
     args = ap.parse_args(argv)
 
@@ -464,7 +494,47 @@ def main(argv: Optional[list[str]] = None) -> None:
     total = len(df)
     limit = total if args.max_rows <= 0 else min(args.max_rows, total)
 
-    for idx in range(limit):
+    use_fast = bool(args.fast_append)
+    debug_mode = bool(args.debug)
+
+    # fast-append 模式的断点续跑准备
+    processed_count = 0
+    out_columns: Optional[List[str]] = None
+    prev_out_df: Optional[pd.DataFrame] = None
+    warned_extra_cols = False
+    if use_fast and not debug_mode:
+        if out_path.exists():
+            try:
+                prev_out_df = _read_table(out_path)
+                processed_count = len(prev_out_df)
+                out_columns = list(prev_out_df.columns)
+                if processed_count > 0:
+                    print(f"↻ 检测到已存在输出，跳过前 {processed_count} 行并续跑……")
+            except Exception as e:
+                print(f"⚠️ fast-append 读取既有输出失败，将从头开始：{e}")
+                prev_out_df = None
+                processed_count = 0
+                out_columns = None
+
+    start_idx = processed_count if use_fast else 0
+    # Debug 模式仅执行一行，支持 --row 指定（1-based）
+    if debug_mode:
+        target_idx = 0
+        if args.row and args.row > 0:
+            if args.row > total:
+                print(f"❌ --row 超出范围：{args.row} > 总行数 {total}")
+                return
+            target_idx = args.row - 1
+        else:
+            print("ℹ️ Debug 未指定 --row，默认处理第 1 行。")
+        start_idx = target_idx
+        limit = target_idx + 1
+    if start_idx >= limit:
+        if not debug_mode:
+            print(f"✅ 已完成：现有输出包含 {processed_count} 行（>= 目标 {limit} 行），无需继续。")
+        return
+
+    for idx in range(start_idx, limit):
         row = df.iloc[idx]
         inputs_payload, user_val, response_mode = _build_request_from_config(row, args, conf)
 
@@ -536,18 +606,46 @@ def main(argv: Optional[list[str]] = None) -> None:
                         if k not in row_out and k not in mapped_under_base:
                             row_out[k] = _render_value(v, bool(args.pretty))
 
-            results.append(row_out)
-            # 增量写出：根据“当前已收集的结果”生成 DataFrame 并落盘
-            if not bool(args.debug):
-                all_keys: List[str] = []
-                for r in results:
-                    for k in r.keys():
-                        if k not in all_keys:
-                            all_keys.append(k)
-                _write_table(pd.DataFrame(results, columns=all_keys), out_path)
+            if use_fast and not debug_mode:
+                suf = out_path.suffix.lower()
+                # 确定输出列：优先沿用既有文件列；否则以当前行的键顺序为列
+                if out_columns is None:
+                    out_columns = list(row_out.keys())
+
+                # 处理潜在的“新列”（include_all 导致的动态列）
+                if not warned_extra_cols:
+                    extra = [k for k in row_out.keys() if k not in out_columns]
+                    if extra:
+                        print(f"⚠️ fast-append: 检测到未在表头中的新列，将被忽略：{', '.join(extra)}")
+                        warned_extra_cols = True
+
+                row_df = pd.DataFrame([{k: row_out.get(k, "") for k in out_columns}], columns=out_columns)
+                if suf == ".csv":
+                    # CSV：逐行追加（首行写表头）
+                    mode = "a" if processed_count > 0 else "w"
+                    header = False if processed_count > 0 else True
+                    row_df.to_csv(out_path, mode=mode, header=header, index=False)
+                    processed_count += 1
+                else:
+                    # Excel：合并既有数据并重写（保持容错与正确性）。
+                    if prev_out_df is None:
+                        prev_out_df = pd.DataFrame(columns=out_columns)
+                    prev_out_df = pd.concat([prev_out_df, row_df], ignore_index=True)
+                    _write_table(prev_out_df, out_path)
+                    processed_count += 1
+            else:
+                results.append(row_out)
+                # 增量写出：根据“当前已收集的结果”生成 DataFrame 并落盘
+                if not debug_mode:
+                    all_keys: List[str] = []
+                    for r in results:
+                        for k in r.keys():
+                            if k not in all_keys:
+                                all_keys.append(k)
+                    _write_table(pd.DataFrame(results, columns=all_keys), out_path)
         else:
             # 兼容原有固定列
-            results.append({
+            row_fixed = {
                 "task_id": res.task_id or "",
                 "workflow_run_id": res.workflow_run_id or "",
                 "data.workflow_id": res.workflow_id or "",
@@ -562,34 +660,53 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "llm_judge.score": res.llm_judge_score or "",
                 "llm_judge.scores": res.llm_judge_scores or "",
                 "llm_judge.diagnostics": res.llm_judge_diagnostics or "",
-            })
+            }
             # 增量写出：固定列顺序
-            if not bool(args.debug):
-                fixed_cols = [
-                    "task_id",
-                    "workflow_run_id",
-                    "data.workflow_id",
-                    "data.status",
-                    "data.outputs.llm_out",
-                    "data.outputs.llm_judge",
-                    "data.outputs.judge_usage",
-                    "data.outputs.check",
-                    "data.outputs.session",
-                    "error",
-                    "llm_judge.schema_ok",
-                    "llm_judge.score",
-                    "llm_judge.scores",
-                    "llm_judge.diagnostics",
-                ]
-                _write_table(pd.DataFrame(results, columns=fixed_cols), out_path)
+            fixed_cols = [
+                "task_id",
+                "workflow_run_id",
+                "data.workflow_id",
+                "data.status",
+                "data.outputs.llm_out",
+                "data.outputs.llm_judge",
+                "data.outputs.judge_usage",
+                "data.outputs.check",
+                "data.outputs.session",
+                "error",
+                "llm_judge.schema_ok",
+                "llm_judge.score",
+                "llm_judge.scores",
+                "llm_judge.diagnostics",
+            ]
+            if use_fast and not debug_mode:
+                suf = out_path.suffix.lower()
+                # 既有列沿用；若不存在则使用固定列
+                if out_columns is None:
+                    out_columns = list(fixed_cols)
+                row_df = pd.DataFrame([{k: row_fixed.get(k, "") for k in out_columns}], columns=out_columns)
+                if suf == ".csv":
+                    mode = "a" if processed_count > 0 else "w"
+                    header = False if processed_count > 0 else True
+                    row_df.to_csv(out_path, mode=mode, header=header, index=False)
+                    processed_count += 1
+                else:
+                    if prev_out_df is None:
+                        prev_out_df = pd.DataFrame(columns=out_columns)
+                    prev_out_df = pd.concat([prev_out_df, row_df], ignore_index=True)
+                    _write_table(prev_out_df, out_path)
+                    processed_count += 1
+            else:
+                results.append(row_fixed)
+                if not debug_mode:
+                    _write_table(pd.DataFrame(results, columns=fixed_cols), out_path)
 
     # 调试模式：不写入输出文件，直接返回
-    if bool(args.debug):
+    if debug_mode:
         print("ℹ️ Debug 模式：已打印请求预览，忽略 -o 输出写入。")
         return
 
     # 最终提示（非 debug 下，此时文件已在循环中逐步写出）
-    if not bool(args.debug):
+    if not debug_mode:
         print(f"✅ 完成：输出写入 {out_path}")
 
 

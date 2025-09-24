@@ -145,6 +145,30 @@ Notes
 输出
 - `-o/--out` 指定的 Excel/CSV 文件，列顺序遵循配置中的 `columns`，若有 `include_all: true` 则追加自动展开列。
 
+调试模式（Debug）增强
+- 仅打印将要发送的请求，不实际调用：`--debug 1`
+- 指定行调试：`--row N`（1-based，仅处理该行；未指定时默认第 1 行）
+- 自动打印可直接复制的 `curl` 命令（包含真实 Token），格式示例：
+  ```bash
+  curl -X POST 'http://localhost/v1/workflows/run' \
+    -H 'Authorization: Bearer app-xxxx' \
+    -H 'Content-Type: application/json' \
+    --data-binary @- <<'JSON'
+  { ... 请求 JSON ... }
+  JSON
+  ```
+
+容错与长批量优化（fast-append）
+- 开启：`--fast-append 1`
+- 行为：
+  - 若发现 `-o` 文件已存在，则跳过已包含的行数，从未处理行继续；
+  - 写入策略：
+    - CSV：逐行追加（首行写表头），每行请求成功后立即写入，然后再发起下一次请求；
+    - Excel（.xlsx/.xls）：为保证正确性，采用“合并既有数据并重写”的方式（每行仍会立即落盘），性能略低于 CSV；
+  - Debug 模式下（`--debug 1`）不写入输出文件。
+- 局限：
+  - 若使用 `include_all: true`（自动展开动态列），fast-append 模式以“既有表头或首行产生的表头”为准，后续行出现的新列会被忽略（不会新增到表头）。如需完整列集合，建议关闭 fast-append 或固定列集合。
+
 去重示例（含 include_all）
 ```jsonc
 {
